@@ -1,0 +1,440 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="ru">
+
+<head>
+	<title>Angry fish</title>
+	<meta http-equiv="content-type" content="text/html;charset=utf-8" />
+<style type="text/css">
+    body {
+		padding: 0;
+		margin: 0;
+		background-color: #bbf0ff;
+    }
+
+    html { position: relative; } /* Фикс для оперы */
+	html, body {
+		height: 100%;
+		overflow: hidden;
+	}
+
+    #background {
+		-webkit-border-radius: 20px;
+		-moz-border-radius: 20px;
+		border-radius: 20px;
+		border: 11px #0277ad solid;
+		background-color: #0277ad;
+		/*background-image: url("images/back.png");*/
+		margin: 0 auto;
+		height: 685px;
+		position: relative;
+		width: 762px;
+    }
+    #canvas {
+	    left: 20px;
+	    position: absolute;
+	    top: 150px;
+    }
+    .wrapper {
+		width: 990px;
+		height: 685px;
+		margin: 0 auto;
+    }
+
+	#game-over {
+		height: 200px;
+		text-align: center;
+		color: white;	
+		margin: 240px auto auto;
+		width: 512px;
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		z-index: 1;
+		display: none;
+	}
+
+	#game-over h1 {
+		font-size: 3em;
+		font-family: sans-serif;
+	}
+	#game-over span {
+		font-size: 1.5em;
+		font-family: sans-serif;
+		color: #000;
+	}
+	#preload {
+		font-size: 1em;
+		font-family: sans-serif;
+		color: #fff;
+		height: 200px;
+		text-align: center;
+		color: white;	
+		margin: 240px auto auto;
+		width: 512px;
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		z-index: 1;
+	}
+	.score {
+		display: none;
+	    color: white;
+	    font-family: sans-serif;
+	    font-size: 2em;
+	    position: absolute;
+	    top: 10px;
+	    left: 25px;
+	}
+
+
+</style>
+</head>
+
+<body>
+<div id="preload"></div>
+<div id="afterPreload" style="display: none"></div>
+<div class="wrapper">
+	<div id="background">
+		<div class="score">
+			<span>Счет: <span id="score"></span></span>
+		</div>
+		<canvas width="722" height="500"  id="canvas"></canvas>
+	</div>
+</div>
+<div id="game-over">
+      <h1>GAME OVER</h1>
+      <span id="play-again">ЖМИ ПРОБЕЛ</span>
+</div>
+
+
+
+<script src="resources.js"></script> 
+<script src="sprite.js"></script> 
+<script src="input.js"></script> 
+
+<script>
+	var linksToLoad = new Array('images/back.png', 'images/diver.png', 'images/fish.png',
+							 'images/bubble.png', 'images/bullet.png', 'images/blood.png');
+
+    if(!window.requestAnimationFrame) {
+    	window.requestAnimationFrame =  window.webkitRequestAnimationFrame ||
+	                                    window.mozRequestAnimationFrame    ||
+	                                    window.oRequestAnimationFrame      ||
+	                                    window.msRequestAnimationFrame     ||
+	                                    function(callback) {
+								            window.setTimeout(callback, 1000 / 60);
+								        }; 
+    }
+
+	var canvas = document.getElementById("canvas");
+	var ctx = canvas.getContext("2d");
+
+	var lastTime;
+	function main() {
+		requestAnimationFrame(main);
+	    var now = Date.now();
+	    var dt = (now - lastTime) / 1000.0;
+
+	    update(dt);
+	    render();
+
+	    lastTime = now;
+	    
+	};
+
+	function init() {
+		document.getElementById('preload').style.display = 'none';
+		document.getElementById('background').style.backgroundImage = 'url(images/back.png)';
+		document.getElementsByClassName('score')[0].style.display = 'block';
+	    document.getElementById('play-again').addEventListener('click', function() {
+	        reset();
+	    });
+
+	    reset();
+	    lastTime = Date.now();
+	    main();
+	}
+
+	resources.load(linksToLoad);
+	resources.onReady(init);
+
+	var player = {
+		live: true,
+	    pos: [0, 0],
+	    dir: 'left',
+	    sprite: new Sprite('images/diver.png', [0, 0], [65, 60]),
+	    drop: function(dt){player.pos[1] += 80 * dt;} 
+	};
+	var blood = null;
+	var bullets = [];
+	var fish = [];
+	var explosions = [];
+
+	var lastFire = Date.now();
+	var gameTime = 0;
+	var isGameOver;
+
+	var score = 0;
+	var scoreEl = document.getElementById('score');
+
+	var playerSpeed = 200;
+	var bulletSpeed = 1000;
+	var fishSpeed = 300;
+
+	function update(dt) {
+	    gameTime += dt;
+
+	    handleInput(dt);
+	    updateEntities(dt);
+		var roulette = Math.random();
+	    if(roulette < 0.04) {
+	    	if(roulette < 0.02) {
+		        fish.push({
+				            pos: [canvas.width, Math.random() * (canvas.height - 66)],
+				            dir: 'left',
+				            sprite: new Sprite('images/fish.png', [0, 0], [93, 66], [canvas.width, Math.random() * (canvas.height - 66)])
+		        		});
+			} else {
+		        fish.push({
+				            pos: [0, Math.random() * (canvas.height - 66)],
+				            dir: 'right',
+				            sprite: new Sprite('images/fish.png', [93, 0], [94, 66], [canvas.width, Math.random() * (canvas.height - 66)])
+		        		});
+			}
+	    }
+
+	    checkCollisions();
+
+	    scoreEl.innerHTML = score;
+	};
+
+	function handleInput(dt) {
+		if(!isGameOver) {
+		    if(input.isDown('down')) {
+		        player.pos[1] += playerSpeed * dt;
+		    }
+
+		    if(input.isDown('up')) {
+		        player.pos[1] -= playerSpeed * dt;
+		    }
+
+		    if(input.isDown('left')) {
+		        player.pos[0] -= playerSpeed * dt;
+		        player.sprite.position[0] = 0;
+		        player.dir = 'left';
+		    }
+
+		    if(input.isDown('right')) {
+		        player.pos[0] += playerSpeed * dt;
+		        player.sprite.position[0] = 66;
+		        player.dir = 'right';
+		    }
+
+		    if(input.isDown('space') && Date.now() - lastFire > 300) {
+		        var x = player.pos[0] + 33;
+		        var y = player.pos[1] + 27;
+		        var direction = player.dir; 
+		        var spriteXpos = direction === 'left' ? 0: 36;
+		        bullets.push({ 
+	        				pos: [x, y],
+	        				dir: player.dir,
+	        				sprite: new Sprite('images/bullet.png', [spriteXpos, 0], [36, 20])
+	        	 			});
+
+		        lastFire = Date.now();
+		    }
+		}
+
+	    if(input.isDown('space') && isGameOver && blood == null) {
+			reset();
+	    }
+
+
+	}
+
+
+	function updateEntities(dt) {
+	    // обновляем спрайт  и позицию дайвера
+	    player.sprite.update(dt);
+
+	    //если у водолаза пошла кровь, то обновляме ее и показываетм надпись 'game-over'
+	    if (blood) {    	
+			blood.sprite.update(dt);
+			if(blood.sprite.done) {
+	            blood = null;
+	            document.getElementById('game-over').style.display = 'block';
+	        }
+	    }
+
+	    // обновляем все пули
+	    for(var i=0; i<bullets.length; i++) {
+	        var bullet = bullets[i];
+
+	        switch(bullet.dir) {
+	        case 'right': bullet.pos[0] += bulletSpeed * dt; break;
+	        case 'left': bullet.pos[0] -= bulletSpeed * dt; break;
+	        }
+
+	        // удалем пулю, вылетевшую за границы канваса
+	        if(bullet.pos[0] + bullet.sprite.size[0] < 0 || bullet.pos[0] > canvas.width) {
+	            bullets.splice(i, 1);
+	            i--;
+	        }
+	    }
+
+	    // обновляем все стаи рыб
+		for(var i=0; i<fish.length; i++) {
+	        var oneFish = fish[i];
+
+	        switch(oneFish.dir) {
+	        case 'right': oneFish.pos[0] += fishSpeed * dt; break;
+	        case 'left': oneFish.pos[0] -= fishSpeed * dt; break;
+	        }
+
+	        // удаляем стаю, вышедшую за границы канваса
+	        if(oneFish.pos[0] + oneFish.sprite.size[0] < 0 || oneFish.pos[0] > canvas.width) {
+	            fish.splice(i, 1);
+	            i--;
+	        }
+	    }
+
+	    // овновляем все пузыри, лопнувших от пули рыб
+	    for(var i=0; i<explosions.length; i++) {
+	        explosions[i].sprite.update(dt);
+
+	        // удаляем объект пузыря по оканчанию анимации
+	        if(explosions[i].sprite.done) {
+	            explosions.splice(i, 1);
+	            i--;
+	        }
+	    }
+		// если водолаз мертв, то он падает на дно
+	    if(!player.live){
+	    	player.drop(dt);
+	    }
+	}
+
+	/*столкновения*/
+	// проверяем столкновение с краем канваса
+	function checkPlayerBounds() { 
+	   
+	    if(player.pos[0] < 0) {
+	        player.pos[0] = 0;
+	    }
+	    else if(player.pos[0] > canvas.width - player.sprite.size[0]) {
+	        player.pos[0] = canvas.width - player.sprite.size[0];
+	    }
+
+	    if(player.pos[1] < 0) {
+	        player.pos[1] = 0;
+	    }
+	    else if(player.pos[1] > canvas.height - player.sprite.size[1]) {
+	        player.pos[1] = canvas.height - player.sprite.size[1];
+	    }
+	}
+
+	//проверка столкновениий объектов между собой
+	function collides(pos, size, pos2, size2) { 
+	    return !(pos[0] >= pos2[0] + size2[0] || pos[1] >= pos2[1] + size2[1] || pos[0] + size[0] <= pos2[0] || pos[1] + size[1] <= pos2[1]);
+	}
+
+	function checkCollisions() {
+	    checkPlayerBounds();
+	    
+	    // проверим столкновения для всех пуль и рыб
+	    for(var i=0; i<fish.length; i++) {
+	        var pos = fish[i].pos;
+	        var size = fish[i].sprite.size;
+
+	        for(var j=0; j<bullets.length; j++) {
+	            var pos2 = bullets[j].pos;
+	            var size2 = bullets[j].sprite.size;
+
+	            if(collides(pos, size, pos2, size2)) {
+	                // удаляем стайку
+	                fish.splice(i, 1);
+	                i--;
+
+	                // добавляем счет
+	                score += 1;
+
+	                // добавляем взрыв
+	                explosions.push({
+	                    pos: pos,
+	                    sprite: new Sprite('images/bubble.png', [0, 0], [64, 64], 16, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], true)
+	                });
+
+	                // Удаляем пулю и останавливаем итерацию
+	                bullets.splice(j, 1);
+	                break;
+	            }
+	        }
+			if(!isGameOver){
+		        if(collides(pos, size, player.pos, player.sprite.size)) {
+					blood = {
+		                    pos: [player.pos[0]-34, player.pos[1]-20],
+		                    sprite: new Sprite('images/blood.png', [0, 0], [128, 128], 6, [0, 1, 2, 3, 4, 5], true)
+		                }
+		            player.live = false;   
+		            gameOver();
+		        }
+		    }    
+	    }
+	}
+
+
+	// Рисуем все на канвасе
+	function render() {
+	 
+	    ctx.clearRect(0, 0, 722, 500);
+
+	    renderEntities(bullets);
+
+	    renderEntity(player);
+
+		if(blood) {
+		renderEntity(blood);
+		}
+	 	
+	    renderEntities(fish);
+	    renderEntities(explosions);
+	};
+
+	function renderEntities(list) {
+	    for(var i=0; i<list.length; i++) {
+	        renderEntity(list[i]);
+	    }    
+	}
+
+	function renderEntity(entity) {
+	    entity.sprite.render(ctx, entity.pos[0], entity.pos[1]);
+	}
+
+	// Game over
+	function gameOver() {
+	    
+	    isGameOver = true;
+	}
+
+	// Сброс игры
+	function reset() {
+	    document.getElementById('game-over').style.display = 'none';
+	    isGameOver = false;
+	    gameTime = 0;
+	    score = 0;
+
+	    fish = [];
+	    bullets = [];
+
+	    player.pos = [330, 220];
+	    player.live = true;
+	};
+
+</script>
+</body>
+</html>
